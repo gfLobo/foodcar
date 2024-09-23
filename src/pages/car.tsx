@@ -1,5 +1,5 @@
 import { Box, Input, Stack } from "@mui/joy";
-import { useEffect, useState } from "react";
+import { ChangeEvent, ChangeEventHandler, useEffect, useState } from "react";
 import { Joystick, JoystickShape } from "react-joystick-component";
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import Head from "next/head";
@@ -7,17 +7,21 @@ import Head from "next/head";
 export default function Car() {
 	const [ws, setWs] = useState<WebSocket | null>(null);
 	const [websocketAddress, setWebsocketAddress] = useState('192.168.1.20');
+	const [ipError, setIpError] = useState(false);
 	const [joystick, setJoystick] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 	const [websocketConnected, setWebsocketConnected] = useState(false);
 
 	useEffect(() => {
 		const connectWebSocket = () => {
+			const ipPattern = /^(25[0-5]|2[0-4][0-9]|[0-1]?[0-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|[0-1]?[0-9]?[0-9])){3}$/;
+			if (!websocketAddress || !ipPattern.test(websocketAddress)) {
+				return;
+			}
 			const newWs = new WebSocket(`ws://${websocketAddress}:81`);
 			newWs.onopen = () => {
 				console.log('WebSocket connected');
 				setWs(newWs);
 				setWebsocketConnected(true); // WebSocket is connected
-				sendCoordinates();
 			};
 			newWs.onclose = () => {
 				console.log('WebSocket closed');
@@ -28,6 +32,7 @@ export default function Car() {
 
 		connectWebSocket();
 	}, [websocketAddress]);
+
 
 	const sendCoordinates = () => {
 		if (ws && ws.readyState === WebSocket.OPEN) {
@@ -54,6 +59,38 @@ export default function Car() {
 			...{ [pos === "x" ? "x" : "y"]: 0 },
 		}));
 	};
+
+	const formatIp = (value: string) => {
+		// Remover tudo que não seja número ou ponto
+		let formattedValue = value.replace(/[^0-9.]/g, '');
+
+		// Adicionar os pontos corretamente
+		if (formattedValue.length > 3 && formattedValue[3] !== '.') {
+			formattedValue = formattedValue.slice(0, 3) + '.' + formattedValue.slice(3);
+		}
+		if (formattedValue.length > 7 && formattedValue[7] !== '.') {
+			formattedValue = formattedValue.slice(0, 7) + '.' + formattedValue.slice(7);
+		}
+		if (formattedValue.length > 11 && formattedValue[11] !== '.') {
+			formattedValue = formattedValue.slice(0, 11) + '.' + formattedValue.slice(11);
+		}
+
+		// Limitar a 15 caracteres (xxx.xxx.xxx.xxx)
+		return formattedValue.substring(0, 15);
+	};
+
+	const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+		const value = e.target.value;
+		const containsInvalidChars = /[^0-9.]/.test(value);
+		if (containsInvalidChars || value.length === 0) {
+			setIpError(true);
+			return;
+		}
+		setIpError(false);
+		const formattedValue = formatIp(value);
+		setWebsocketAddress(formattedValue);
+	};
+	useEffect(sendCoordinates, [joystick]);
 
 	return (
 		<Box>
@@ -91,8 +128,10 @@ export default function Car() {
 						}}
 					/>
 					<Input
-						onChange={(e) => setWebsocketAddress(e.target.value)}
-						startDecorator={"IP:"}
+						onChange={handleChange}
+						error={ipError}
+						variant="solid"
+						startDecorator={<p style={{ color: "white" }}>IP:</p>}
 						sx={{
 							width: 150,
 							justifyContent: "center",
